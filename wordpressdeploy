@@ -1,0 +1,159 @@
+#!/bin/bash
+
+# Functions
+ok() { echo -e '\e[32m'$1'\e[m'; } # Green
+nok() { echo -e '\e[31m'$1'\e[m'; }
+readme() {
+                echo "wp-admin user:?"
+                read -e user
+                echo "wp-admin password:?"
+                read -s pass
+                touch README.md
+                echo -e "\nURL : http://$pro_dir.wp.gfbeta.net" >> README.md
+                echo -e "\n\n MySQL DETAILS" >> README.md
+                echo -e "===================" >> README.md
+                echo -e "\nURL : mysql.gemfind.com" >> README.md
+                echo -e "Username - $dbuser" >> README.md
+                echo -e "Password - $dbpass" >> README.md
+                echo -e "\n\n wp-admin details" >> README.md
+                echo -e "===================" >> README.md
+                echo -e "\nURL : http://$pro_dir.wp.gfbeta.net/wp-login.php" >> README.md
+                echo -e "Username - $user" >> README.md
+                echo -e "Password - $pass" >> README.md
+                clear
+		ok "================"
+                echo "README.md"
+		cat README.md
+		ok "================"
+         }
+gitops()
+{
+git add .
+git commit -m "Initial commit"
+git push origin master
+ok "Files pushed to repo"
+}
+
+clear
+password="!g3mf1nd!@"
+
+
+
+		EXPECTED_ARGS=3
+		E_BADARGS=65
+		MYSQL=`which mysql`
+ 
+		dbname=$1
+		dbuser=$2
+		dbpass=$3
+		Q1="CREATE DATABASE IF NOT EXISTS $1;"
+		Q2="GRANT ALL ON $1.* TO '$2'@'localhost' IDENTIFIED BY '$3';"
+		Q3="FLUSH PRIVILEGES;"
+		SQL="${Q1}${Q2}${Q3}"
+ 
+			if [ $# -ne $EXPECTED_ARGS ]
+			then
+  			nok "Usage: $0 dbname dbuser dbpass"
+  			exit $E_BADARGS
+			fi
+
+
+			DBEXISTS=$(mysql -uroot -p$password --batch --skip-column-names -e "SHOW DATABASES LIKE '"$dbname"';" | grep "$dbname" > /dev/null; echo "$?")
+
+			if [ $DBEXISTS -eq 0 ];then
+    			nok "A database with the name $dbname already exists. exiting"
+			exit
+			else
+ 
+			$MYSQL -uroot -p$password -e "$SQL"
+
+				if [ $? == 0 ]
+				then
+				ok "Database $1 and user $2 created with a password $3"
+				else 
+  				nok "Database creation failed"
+				fi
+                      fi
+
+#######################################################################################
+echo "============================================"
+echo "WordPress Install Script"
+echo "============================================"
+
+
+echo "Install wordpress  using same database ? (y/n)"
+read -e run
+	if [ "$run" != y ] ; then
+	nok "exiting...."
+	exit
+	else
+
+	echo "Project name: "
+	read -e pro_dir
+
+HOME_DIR=/backup/git/wordpress/$pro_dir
+DATA_DIR=/var/www/builder/cms/wordpress
+		if [ -d $HOME_DIR ]
+		then
+
+		#download wordpress from sorce to working directory
+
+		cd $HOME_DIR
+                	if [ -f wp-config.php ]
+			then
+			nok "Already have wordpress installed under $pro_dir. Exiting!!!"
+			exit
+			fi	
+		rsync -avz $DATA_DIR/* .
+		clear
+		#create wp config
+		cp wp-config-sample.php wp-config.php
+		#set database details with perl find and replace
+		perl -pi -e "s/database_name_here/$dbname/g" wp-config.php
+		perl -pi -e "s/username_here/$dbuser/g" wp-config.php
+		perl -pi -e "s/password_here/$dbpass/g" wp-config.php
+
+		#set WP salts
+perl -i -pe'
+  BEGIN {
+    @chars = ("a" .. "z", "A" .. "Z", 0 .. 9);
+    push @chars, split //, "!@#$%^&*()-_ []{}<>~\`+=,.;:/?|";
+    sub salt { join "", map $chars[ rand @chars ], 1 .. 64 }
+  }
+  s/put your unique phrase here/salt()/ge
+' wp-config.php
+
+		#create uploads folder and set permissions
+		mkdir wp-content/uploads
+		
+		# add puller.php
+                touch puller.php
+                echo "<?php shell_exec( 'cd $HOME_DIR && git reset --hard HEAD && git pull' );?>" >> puller.php 
+		
+		echo "========================="
+		ok "Now try http://$pro_dir.wp.gfbeta.net in browser and compleate the installation:"
+		echo "========================="
+		readme
+
+		chmod 775 wp-content/uploads
+                chown -R apache. *
+                chown -R apache. .git/
+                
+                echo "PUSH files to repo: ? (y/n)"
+		
+		read -e rep
+        		if [ "$rep" == y ] ; then
+			echo "=============="
+			ok "pushing files to repo..."
+			gitops
+			echo "============="
+			else
+			echo " Files are not pushed to repo:"
+			fi
+                nok "Remember to add webhook http://$pro_dir.wp.gfbeta.net/puller.php in gitlab project"
+
+		else 
+		nok "Directory $HOME_DIR not exist."
+		exit
+		fi
+	fi

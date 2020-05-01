@@ -1,0 +1,299 @@
+#!/bin/bash
+
+password="!g3mf1nd!@"
+DB_HOST=localhost
+DB_NAME=mage_%name%
+DB_USER=mage_%name%
+DB_PASS=`openssl rand -base64 32`
+WWW_PATH=/backup/git/magento/%name%
+WWW_URL=http://%name%.m.gfbeta.net
+MAG_DEVELOPER_MODE=1
+MAG_FIRSTNAME=gemfind
+MAG_SURNAME=developer
+MAG_EMAIL=admin@admin.com
+MAG_USER=gemfind.developer
+MAG_PASS=`openssl rand -base64 32`
+SHOW_HELP=0
+VALIDATION_MESSAGE=""
+DATA_DIR=/var/www/builder/cms/magento
+
+
+
+# Functions
+
+ok() { echo -e '\e[32m'$1'\e[m'; } # Green
+
+nok() { echo -e '\e[31m'$1'\e[m'; }
+
+readme() {
+echo -e "\n\n#  $NAME" >> README.md
+echo -e "\nInformation" >> README.md
+echo -e "-" >> README.md
+echo -e "\n* URL: http://$NAME.m.gfbeta.net" >> README.md
+echo -e "* Created at : $(date)" >> README.md
+echo -e "\nBackend" >> README.md
+echo -e "-" >> README.md
+echo -e "\n* URL: http://$NAME.m.gfbeta.net/index.php/admin" >> README.md
+echo -e "* Username : $MAG_USER" >> README.md
+echo -e "* Password : $MAG_PASS" >> README.md
+echo -e "\nDatabase" >> README.md
+echo -e "-" >> README.md
+echo -e "\n* URL: http://mysql.gemfind.com" >> README.md
+echo -e "* Database : $DB_NAME" >> README.md
+echo -e "* USer : $DB_USER" >> README.md
+echo -e "* Password : $DB_PASS" >> README.md
+echo -e "\n\nThese are the credentials that the project had during creation and may be subject to change." >> README.md
+echo -e "Feel free to update this file(README.md) in the repository to keep them up to date." >> README.md
+echo -e "\n\n" >> README.md
+}
+
+gitops()
+{
+git add .
+git commit -m "Initial commit"
+git push origin master
+ok "Files pushed to repo"
+nok "Remember to add webhook http://$NAME.m.gfbeta.net/puller.php in gitlab magento project"
+}
+
+
+# Read command line options
+index=0
+options=$@
+arguments=($options)
+
+
+	for argument in $options
+	do
+    	index=`expr $index + 1`
+    	value=${arguments[`expr $index`]}
+    	case $argument in
+        # Options
+        # General
+        -n | --name) NAME=$value;;
+        -h | --help) SHOW_HELP=1;;
+    	esac
+	done
+
+# Show help!
+if [ $SHOW_HELP == 1 ]; then
+    nok "\n! Usage is:"
+    nok "./mageinstall.sh -n <project_name>"
+    echo ""
+    exit
+fi
+
+# Validate parameters
+
+# General
+if [[ -z $NAME ]]; then
+    VALIDATION_MESSAGE="Usage is : mageinstall.sh -n <project_name>"
+fi
+
+if [[ -z $WWW_PATH ]]; then
+    VALIDATION_MESSAGE="Configuration 'WWW_PATH' cannot be empty"
+fi
+
+# Database
+if [[ -z $DB_NAME ]]; then
+    VALIDATION_MESSAGE="Configuration 'DB_NAME' cannot be empty"
+fi
+
+if [[ -z $DB_HOST ]]; then
+    VALIDATION_MESSAGE="Configuration 'DB_HOST' cannot be empty"
+fi
+
+if [[ -z $DB_USER ]]; then
+    VALIDATION_MESSAGE="Configuration 'DB_USER' cannot be empty"
+fi
+
+if [[ -z $DB_PASS ]]; then
+    VALIDATION_MESSAGE="Configuration 'DB_PASS' cannot be empty"
+fi
+
+
+if [[ -z $MAG_DEVELOPER_MODE ]]; then
+    VALIDATION_MESSAGE="Configuration 'MAG_DEVELOPER_MODE' cannot be empty"
+fi
+
+if [[ -z $MAG_FIRSTNAME ]]; then
+    VALIDATION_MESSAGE="Configuration 'MAG_FIRSTNAME' cannot be empty"
+fi
+
+if [[ -z $MAG_SURNAME ]]; then
+   VALIDATION_MESSAGE="Configuration 'MAG_SURNAME' cannot be empty"
+fi
+
+if [[ -z $MAG_EMAIL ]]; then
+    VALIDATION_MESSAGE="Configuration 'MAG_EMAIL' cannot be empty"
+fi
+
+if [[ -z $MAG_USER ]]; then
+    VALIDATION_MESSAGE="Configuration 'MAG_USER' cannot be empty"
+fi
+
+if [[ -z $MAG_PASS ]]; then
+    VALIDATION_MESSAGE="Configuration 'MAG_PASS' cannot be empty"
+fi
+
+# Print message if present
+if [[ ! -z $VALIDATION_MESSAGE ]]; then
+    nok "\n! $VALIDATION_MESSAGE"
+    echo ""
+    exit
+fi
+
+
+# Render name variables with the name variable
+WWW_PATH=${WWW_PATH/\%name\%/$NAME}
+WWW_URL=${WWW_URL/\%name\%/$NAME}
+DB_NAME=${DB_NAME/\%name\%/$NAME}
+DB_USER=${DB_USER/\%name\%/$NAME}
+
+    # Check whether or not the user wants to continue
+    read -p "Are you really sure that you want to continue y/n [n]? " -n 1
+    echo ""
+
+    if [[ ! $REPLY =~ ^[Yy]$ ]]
+    then
+        nok "* Installation aborted."
+        exit 1
+    fi
+
+
+# Create the database if it doesn't exist
+#############################################################
+		if [ -d $WWW_PATH ]
+                then
+
+			cd $WWW_PATH
+                        if [ -f index.php ]
+                        then
+                        nok "$WWW_PATH already contains contents. Please make sure the project is empty before continue. Exiting !!"
+                        exit
+                        fi
+
+			if [ ! -d .git ]
+			then
+			nok "\n Please clone the project instead of just creating project directory !."
+			exit
+			fi
+
+# Database creation starts
+		echo "* Recreating database $DB_NAME..."
+                MYSQL=`which mysql`
+                Q1="CREATE DATABASE IF NOT EXISTS $DB_NAME;"
+                Q2="GRANT ALL ON $DB_NAME.* TO '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASS';"
+                Q3="FLUSH PRIVILEGES;"
+                SQL="${Q1}${Q2}${Q3}"
+
+
+                        DBEXISTS=$(mysql -uroot -p$password --batch --skip-column-names -e "SHOW DATABASES LIKE '"$DB_NAME"';" | grep "$DB_NAME" > /dev/null; echo "$?")
+
+                        if [ $DBEXISTS -eq 0 ];then
+                        nok "A database with the name $DB_NAME already exists. exiting"
+                        exit
+                        else
+
+                        $MYSQL -uroot -p$password -e "$SQL"
+
+                                if [ $? == 0 ]
+                                then
+                                ok "Database $DB_NAME and user $DB_USER created with a password $DB_PASS"
+                                else
+                                nok "Database creation failed"
+                                fi
+                        fi
+# Database creation ends
+
+# File transfer begins.
+
+		
+		# add puller.php
+                touch puller.php
+                echo "<?php shell_exec( 'cd $WWW_PATH && git reset --hard HEAD && git pull' );?>" >> puller.php
+
+                readme 
+                rsync -az /usr/src/magento/* .
+
+		chown -R apache:apache $WWW_PATH
+		chmod -R o+w $WWW_PATH/media $WWW_PATH/var > /dev/null
+		chmod o+w $WWW_PATH/app/etc > /dev/null
+		rm -rf $WWW_PATH/downloader/pearlib/cache/* $WWW_PATH/downloader/pearlib/download/* > /dev/null
+
+# Run installer
+echo "* Installing Magento..."
+installation_result=`php -f install.php -- \
+    --license_agreement_accepted "yes" \
+    --locale "en_GB" \
+    --timezone "Europe/London" \
+    --default_currency "GBP" \
+    --db_host "$DB_HOST" \
+    --db_name "$DB_NAME" \
+    --db_user "$DB_USER" \
+    --db_pass "$DB_PASS" \
+    --url "$WWW_URL" \
+    --use_rewrites "no" \
+    --use_secure "no" \
+    --secure_base_url "" \
+    --use_secure_admin "no" \
+    --skip_url_validation "yes" \
+    --admin_firstname "$MAG_FIRSTNAME" \
+    --admin_lastname "$MAG_SURNAME" \
+    --admin_email "$MAG_EMAIL" \
+    --admin_username "$MAG_USER" \
+    --admin_password "$MAG_PASS"` > /dev/null
+
+# Check whether the Mage CLI is present. Should be for versions >=1.5
+	if [ -f ./mage ]; then
+    	chmod +x ./mage > /dev/null
+    	./mage mage-setup > /dev/null
+
+# Check whether there are extensions to install
+    		if [ ${#MAG_EXTENSIONS[@]} > 0 ]; then
+        		for extension_name in "${MAG_EXTENSIONS[@]}"
+        		do
+            		echo "* Installing extension $extension_name..."
+            		./mage install community $extension_name > /dev/null
+        		done
+    		fi
+	fi
+
+# Check that the installation was successful
+	if [[ "$installation_result" != *SUCCESS* ]]
+	then
+    	nok "! Installation failed. Installation returned: $installation_result"
+    	exit
+	fi
+
+# Enable developer mode
+	if [ $MAG_DEVELOPER_MODE == 1 ]; then
+    	sed -i -e '/Mage::run/i\
+Mage::setIsDeveloperMode(true);
+' -e '1,$s//Mage::run/' $WWW_PATH/index.php
+fi
+
+# Master, we did okay. We did okay...
+ok "\n* Installation successfully completed. Access site at: $WWW_URL"
+
+else #Project directory not exist. Condition.
+nok "\n Project Directory <$NAME> not exist in /backup/git/magento/"
+nok "\n Please clone the repo in /backup/git/magento/ before you use this script."
+echo ""
+exit
+
+fi # If close after verifying working directory exist.
+#####################################################################################
+
+# Push files to repo
+echo "PUSH files to repo: ? (y/n)"
+read -e rep
+        		if [ "$rep" == y ] ; then
+			echo "=============="
+			ok "pushing files to repo..."
+			gitops
+			echo "============="
+			else
+			echo " Files are not pushed to repo:"
+			fi
+

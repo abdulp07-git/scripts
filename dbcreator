@@ -1,0 +1,124 @@
+#!/bin/bash
+
+# Functions
+ok() { echo -e '\e[32m'$1'\e[m'; } # Green
+nok() { echo -e '\e[31m'$1'\e[m'; }
+
+
+password="!g3mf1nd!@"
+
+
+
+		EXPECTED_ARGS=3
+		E_BADARGS=65
+		MYSQL=`which mysql`
+ 
+		dbname=$1
+		dbuser=$2
+		dbpass=$3
+		Q1="CREATE DATABASE IF NOT EXISTS $1;"
+		Q2="GRANT ALL ON $1.* TO '$2'@'localhost' IDENTIFIED BY '$3';"
+		Q3="FLUSH PRIVILEGES;"
+		SQL="${Q1}${Q2}${Q3}"
+ 
+			if [ $# -ne $EXPECTED_ARGS ]
+			then
+  			nok "Usage: $0 dbname dbuser dbpass"
+  			exit $E_BADARGS
+			fi
+
+
+			DBEXISTS=$(mysql -uroot -p$password --batch --skip-column-names -e "SHOW DATABASES LIKE '"$dbname"';" | grep "$dbname" > /dev/null; echo "$?")
+
+			if [ $DBEXISTS -eq 0 ];then
+    			nok "A database with the name $dbname already exists. exiting"
+			exit
+			else
+ 
+			$MYSQL -uroot -p$password -e "$SQL"
+
+				if [ $? == 0 ]
+				then
+				ok "Database $1 and user $2 created with a password $3"
+				else 
+  				nok "Database creation failed"
+				fi
+                      fi
+
+#######################################################################################
+echo "============================================"
+echo "WordPress Install Script"
+echo "============================================"
+
+
+echo "run install using same database ? (y/n)"
+read -e run
+	if [ "$run" == n ] ; then
+	exit
+	else
+
+	echo "Project name: "
+	read -e pro_dir
+
+HOME_DIR=/backup/git/wordpress/$pro_dir
+DATA_DIR=/var/www/builder/cms/wordpress
+		if [ -d $HOME_DIR ]
+		then
+		echo "============================================"
+		echo "A robot is now installing WordPress for you."
+		echo "============================================"
+
+
+		#download wordpress
+
+		cd $HOME_DIR
+		rsync -avz $DATA_DIR/* .
+		#create wp config
+		cp wp-config-sample.php wp-config.php
+		#set database details with perl find and replace
+		perl -pi -e "s/database_name_here/$dbname/g" wp-config.php
+		perl -pi -e "s/username_here/$dbuser/g" wp-config.php
+		perl -pi -e "s/password_here/$dbpass/g" wp-config.php
+
+		#set WP salts
+perl -i -pe'
+  BEGIN {
+    @chars = ("a" .. "z", "A" .. "Z", 0 .. 9);
+    push @chars, split //, "!@#$%^&*()-_ []{}<>~\`+=,.;:/?|";
+    sub salt { join "", map $chars[ rand @chars ], 1 .. 64 }
+  }
+  s/put your unique phrase here/salt()/ge
+' wp-config.php
+
+		#create uploads folder and set permissions
+		mkdir wp-content/uploads
+		
+		# add puller.php
+                touch puller.php
+                echo "<?php shell_exec( 'cd $HOME_DIR && git reset --hard HEAD && git pull' );?>" >> puller.php 
+		chmod 775 wp-content/uploads
+		chown -R apache. *
+		echo "========================="
+		echo "Now try http://$pro_dir.wp.gfbeta.net in browser and compleate the installation:"
+                echo "wp-admin user:?"
+                read -e user
+		echo "wp-admin password:?"
+		read -s pass
+
+                #Creating README.md
+                touch README.md
+                echo -e "\nURL : http://$pro_dir.wp.gfbeta.net" >> README.md
+                echo -e "\n\n MySQL DETAILS" >> README.md
+                echo -e "===================" >> README.md
+                echo -e "\n\nURL : mysql.gemfind.com" >> README.md
+                echo -e "Username - $dbuser" >> README.md
+
+
+
+                echo "Remember to add webhook http://$pro_dir.wp.gfbeta.net/puller.php" 
+		echo "========================="
+		else 
+		nok "Directory $HOME_DIR not exist."
+		exit
+		fi
+	fi
