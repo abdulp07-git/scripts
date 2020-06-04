@@ -1,0 +1,43 @@
+#! /bin/bash
+
+if [ $# -ne 1 ]
+then
+echo "Usage: $0 [domain name]"
+exit 1
+fi
+
+#getDate=`jwhois $1 | grep Expir`
+getDate=`whois $1 | grep Expir`
+
+expireDate=`echo "$getDate" | cut -d":" -f2-22 | cut -c1-11`
+
+currentDate=`date +%s`
+
+expireDate=`date +%s --date="$expireDate"`
+
+### Difference between expiration and right now
+timeDiffSec=`expr $expireDate - $currentDate`
+
+### Convert to days (86400 seconds in a day)
+timeDiffDays=`expr $timeDiffSec / 86400`
+
+if [ $timeDiffDays -lt 15 ]
+then
+echo "CRITICAL: $timeDiffDays Left Until Domain Expiration"
+exit 2
+fi
+
+if [ $timeDiffDays -lt 31 ]
+then
+echo "WARNING: $timeDiffDays Left Until Domain Expiration"
+exit 1
+fi
+
+if [ $timeDiffDays -gt 30 ]
+then
+echo "OK: $timeDiffDays Left Until Domain Expiration"
+exit 0
+fi
+
+echo "Oops! Check the script for any required updates"
+exit 1
