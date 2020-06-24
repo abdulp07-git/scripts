@@ -1,0 +1,13 @@
+#!/bin/bash
+for i in `cat list`
+do 
+cp -p /home/$i/public_html/wp-config.php /home/$i/public_html/wp-config.back.php
+
+# To remove the line with string
+sed -i '/DISABLE_WP_CRON/d' /home/$i/public_html/wp-config.php
+sed -i '/WP_AUTO_UPDATE_CORE/d' /home/$i/public_html/wp-config.php
+
+# Append end of wp-config.php
+echo "define('DISABLE_WP_CRON', true);" >> /home/$i/public_html/wp-config.php
+echo "define( 'WP_AUTO_UPDATE_CORE', false );" >> /home/$i/public_html/wp-config.php
+done
